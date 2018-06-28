@@ -129,7 +129,7 @@ but in the database they are stored in the same table.
 
 ```typescript
 @Entity()
-@TableInheritance({ column: { type: "varchar", name: "type" } })
+@TableInheritance()
 export class Content {
     
     @PrimaryGeneratedColumn()

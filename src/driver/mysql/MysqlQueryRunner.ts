@@ -17,7 +17,6 @@ import {BaseQueryRunner} from "../../query-runner/BaseQueryRunner";
 import {Broadcaster} from "../../subscriber/Broadcaster";
 import {ColumnType, PromiseUtils} from "../../index";
 import {TableCheck} from "../../schema-builder/table/TableCheck";
-import {IsolationLevel} from "../types/IsolationLevel";
 
 /**
  * Runs queries on a single mysql database connection.
@@ -100,15 +99,12 @@ export class MysqlQueryRunner extends BaseQueryRunner implements QueryRunner {
     /**
      * Starts transaction on the current connection.
      */
-    async startTransaction(isolationLevel?: IsolationLevel): Promise<void> {
+    async startTransaction(): Promise<void> {
         if (this.isTransactionActive)
             throw new TransactionAlreadyStartedError();
 
         this.isTransactionActive = true;
         await this.query("START TRANSACTION");
-        if (isolationLevel) {
-            await this.query("SET SESSION TRANSACTION ISOLATION LEVEL " + isolationLevel);
-        }
     }
 
     /**

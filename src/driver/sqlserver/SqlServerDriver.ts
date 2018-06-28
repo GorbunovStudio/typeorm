@@ -442,9 +442,6 @@ export class SqlServerDriver implements Driver {
         } else if (column.type === "double precision") {
             return "float";
 
-        } else if (column.type === "rowversion") {
-            return "timestamp";  // the rowversion type's name in SQL server metadata is timestamp            
-
         } else {
             return column.type as string || "";
         }

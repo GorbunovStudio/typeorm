@@ -14,7 +14,6 @@ import {TableUnique} from "../../schema-builder/table/TableUnique";
 import {BaseQueryRunner} from "../../query-runner/BaseQueryRunner";
 import {OrmUtils} from "../../util/OrmUtils";
 import {TableCheck} from "../../schema-builder/table/TableCheck";
-import {IsolationLevel} from "../types/IsolationLevel";
 
 /**
  * Runs queries on a single sqlite database connection.
@@ -63,24 +62,11 @@ export abstract class AbstractSqliteQueryRunner extends BaseQueryRunner implemen
     /**
      * Starts transaction.
      */
-    async startTransaction(isolationLevel?: IsolationLevel): Promise<void> {
+    async startTransaction(): Promise<void> {
         if (this.isTransactionActive)
             throw new TransactionAlreadyStartedError();
 
         this.isTransactionActive = true;
-        
-        if (isolationLevel) {
-            if (isolationLevel !== "READ UNCOMMITTED" && isolationLevel !== "SERIALIZABLE") {
-                throw new Error(`SQLite only supports SERIALIZABLE and READ UNCOMMITTED isolation`);
-            }
-
-            if (isolationLevel === "READ UNCOMMITTED") {
-                await this.query("PRAGMA read_uncommitted = true");
-            } else {
-                await this.query("PRAGMA read_uncommitted = false");
-            }
-        }
-
         await this.query("BEGIN TRANSACTION");
     }
 

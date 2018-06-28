@@ -15,9 +15,4 @@ export interface SqliteConnectionOptions extends BaseConnectionOptions {
      */
     readonly database: string;
 
-    /**
-     * Encryption key for for SQLCipher.
-     */
-    readonly key?: string;
-
 }

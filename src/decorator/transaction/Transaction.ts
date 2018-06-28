@@ -1,6 +1,4 @@
-import {getConnection, getMetadataArgsStorage, MongoRepository, Repository, TreeRepository, EntityManager} from "../../";
-import {TransactionOptions} from "../options/TransactionOptions";
-import {IsolationLevel} from "../../driver/types/IsolationLevel";
+import {getConnection, getMetadataArgsStorage, MongoRepository, Repository, TreeRepository} from "../../";
 
 /**
  * Wraps some method into the transaction.
@@ -15,9 +13,7 @@ import {IsolationLevel} from "../../driver/types/IsolationLevel";
  * If you want to use repositories instead of bare entity manager,
  * then use @TransactionRepository() decorator.
  */
-export function Transaction(connectionName?: string): MethodDecorator;
-export function Transaction(options?: TransactionOptions): MethodDecorator;
-export function Transaction(connectionOrOptions?: string | TransactionOptions): MethodDecorator {
+export function Transaction(connectionName: string = "default"): MethodDecorator {
     return function (target: Object, methodName: string, descriptor: PropertyDescriptor) {
 
         // save original method - we gonna need it
@@ -25,22 +21,7 @@ export function Transaction(connectionOrOptions?: string | TransactionOptions): 
 
         // override method descriptor with proxy method
         descriptor.value = function(...args: any[]) {
-            let connectionName = "default";
-            let isolationLevel: IsolationLevel | undefined = undefined;
-            if (connectionOrOptions) {
-                if (typeof connectionOrOptions === "string") {
-                    connectionName = connectionOrOptions;
-                } else {
-                    if (connectionOrOptions.hasOwnProperty("connectionName") && connectionOrOptions.connectionName) {
-                        connectionName = connectionOrOptions.connectionName;
-                    }
-                    if (connectionOrOptions.hasOwnProperty("isolation") && connectionOrOptions.isolationLevel) {
-                        isolationLevel = connectionOrOptions.isolationLevel;
-                    }
-                }
-            }
-
-            const transactionCallback = (entityManager: EntityManager) => {
+            return getConnection(connectionName).manager.transaction(entityManager => {
                 let argsWithInjectedTransactionManagerAndRepositories: any[];
 
                 // filter all @TransactionEntityManager() and @TransactionRepository() decorator usages for this method
@@ -91,12 +72,7 @@ export function Transaction(connectionOrOptions?: string | TransactionOptions): 
                 });
 
                 return originalMethod.apply(this, argsWithInjectedTransactionManagerAndRepositories);
-            };
-            if (isolationLevel) {
-                return getConnection(connectionName).manager.transaction(isolationLevel, transactionCallback);
-            } else {
-                return getConnection(connectionName).manager.transaction(transactionCallback);
-            }
+            });
         };
     };
 }

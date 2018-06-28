@@ -18,7 +18,6 @@ import {OrmUtils} from "../../util/OrmUtils";
 import {PromiseUtils} from "../../";
 import {TableCheck} from "../../schema-builder/table/TableCheck";
 import {ColumnType} from "../../index";
-import {IsolationLevel} from "../types/IsolationLevel";
 
 /**
  * Runs queries on a single postgres database connection.
@@ -113,15 +112,12 @@ export class PostgresQueryRunner extends BaseQueryRunner implements QueryRunner 
     /**
      * Starts transaction.
      */
-    async startTransaction(isolationLevel?: IsolationLevel): Promise<void> {
+    async startTransaction(): Promise<void> {
         if (this.isTransactionActive)
             throw new TransactionAlreadyStartedError();
 
         this.isTransactionActive = true;
         await this.query("START TRANSACTION");
-        if (isolationLevel) {
-            await this.query("SET TRANSACTION ISOLATION LEVEL " + isolationLevel);
-        }
     }
 
     /**

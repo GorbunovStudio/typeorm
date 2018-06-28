@@ -38,14 +38,6 @@ const connection = await createConnection({
     database: "test"
 });
 ```
-A single `url` attribute, plus the `type` attribute, will work too.
-
-```js
-createConnection({
-    type: 'postgres',
-    url: 'postgres://test:test@localhost/test'
-})
-```
 
 `createConnections` creates multiple connections:
 
