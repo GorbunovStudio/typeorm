@@ -6,6 +6,7 @@ import {User} from "./entity/User";
 import {Category} from "./entity/Category";
 import {Post} from "./entity/Post";
 import {Photo} from "./entity/Photo";
+import sinon from "sinon";
 
 describe("repository > find options", () => {
 
@@ -47,6 +48,35 @@ describe("repository > find options", () => {
                 name: "Boys"
             }]
         });
+
+    })));
+
+    it("should execute select query inside transaction", () => Promise.all(connections.map(async connection => {
+
+        const user = new User();
+        user.name = "Alex Messer";
+        await connection.manager.save(user);
+
+
+        const queryRunner = await connection.createQueryRunner();
+
+        const startTransactionFn = sinon.spy(queryRunner, "startTransaction");
+        const commitTransactionFn = sinon.spy(queryRunner, "commitTransaction");
+
+        expect(startTransactionFn.called).to.be.false;
+        expect(commitTransactionFn.called).to.be.false;
+
+        await connection
+            .createEntityManager(queryRunner)
+            .getRepository(User)
+            .findOne(1, {
+                transaction: true
+            });
+
+        expect(startTransactionFn.calledOnce).to.be.true;
+        expect(commitTransactionFn.calledOnce).to.be.true;
+
+        await queryRunner.release();
 
     })));
 
@@ -117,6 +147,49 @@ describe("repository > find options", () => {
         // })));
     })));
 
+    it("should select by given conditions", () => Promise.all(connections.map(async connection => {
+
+        const category1 = new Category();
+        category1.name = "Bears";
+        await connection.manager.save(category1);
+
+        const category2 = new Category();
+        category2.name = "Dogs";
+        await connection.manager.save(category2);
+
+        const category3 = new Category();
+        category3.name = "Cats";
+        await connection.manager.save(category3);
+
+        const loadedCategories1 = await connection.getRepository(Category).find({
+            where: {
+                name: "Bears"
+            }
+        });
+
+        expect(loadedCategories1).to.be.eql([{
+            id: 1,
+            name: "Bears"
+        }]);
+
+        const loadedCategories2 = await connection.getRepository(Category).find({
+            where: [{
+                name: "Bears"
+            }, {
+                name: "Cats"
+            }]
+        });
+
+        expect(loadedCategories2).to.be.eql([{
+            id: 1,
+            name: "Bears"
+        }, {
+            id: 3,
+            name: "Cats"
+        }]);
+
+    })));
+
 });
 
 
@@ -130,7 +203,7 @@ describe("repository > find options > cache", () => {
     after(() => closeTestingConnections(connections));
 
     it("repository should cache results properly", () => Promise.all(connections.map(async connection => {
-        
+
         // first prepare data - insert users
         const user1 = new User();
         user1.name = "Harry";

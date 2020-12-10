@@ -1,18 +1,20 @@
 import {createConnection} from "../index";
 import {ConnectionOptionsReader} from "../connection/ConnectionOptionsReader";
 import {Connection} from "../connection/Connection";
-const chalk = require("chalk");
+import * as yargs from "yargs";
+import chalk from "chalk";
 
 /**
  * Reverts last migration command.
  */
-export class MigrationRevertCommand {
+export class MigrationRevertCommand implements yargs.CommandModule {
 
     command = "migration:revert";
     describe = "Reverts last executed migration.";
+    aliases = "migrations:revert";
 
-    builder(yargs: any) {
-        return yargs
+    builder(args: yargs.Argv) {
+        return args
             .option("c", {
                 alias: "connection",
                 default: "default",
@@ -30,12 +32,18 @@ export class MigrationRevertCommand {
             });
     }
 
-    async handler(argv: any) {
+    async handler(args: yargs.Arguments) {
+        if (args._[0] === "migrations:revert") {
+            console.log("'migrations:revert' is deprecated, please use 'migration:revert' instead");
+        }
 
         let connection: Connection|undefined = undefined;
         try {
-            const connectionOptionsReader = new ConnectionOptionsReader({ root: process.cwd(), configName: argv.config });
-            const connectionOptions = await connectionOptionsReader.get(argv.connection);
+            const connectionOptionsReader = new ConnectionOptionsReader({
+                root: process.cwd(),
+                configName: args.config as any
+            });
+            const connectionOptions = await connectionOptionsReader.get(args.connection as any);
             Object.assign(connectionOptions, {
                 subscribers: [],
                 synchronize: false,
@@ -44,9 +52,26 @@ export class MigrationRevertCommand {
                 logging: ["query", "error", "schema"]
             });
             connection = await createConnection(connectionOptions);
+
             const options = {
-                transaction: argv["t"] === "false" ? false : true
+                transaction: "all" as "all" | "none" | "each",
             };
+
+            switch (args.t) {
+                case "all":
+                    options.transaction = "all";
+                    break;
+                case "none":
+                case "false":
+                    options.transaction = "none";
+                    break;
+                case "each":
+                    options.transaction = "each";
+                    break;
+                default:
+                    // noop
+            }
+
             await connection.undoLastMigration(options);
             await connection.close();
 

@@ -41,7 +41,7 @@ export class SqljsQueryRunner extends AbstractSqliteQueryRunner {
     /**
      * Executes a given SQL query.
      */
-    query(query: string, parameters?: any[]): Promise<any> {
+    query(query: string, parameters: any[] = []): Promise<any> {
         if (this.isReleased)
             throw new QueryRunnerAlreadyReleasedError();
 
@@ -49,9 +49,14 @@ export class SqljsQueryRunner extends AbstractSqliteQueryRunner {
             const databaseConnection = this.driver.databaseConnection;
             this.driver.connection.logger.logQuery(query, parameters, this);
             const queryStartTime = +new Date();
+            let statement: any;
             try {
-                const statement = databaseConnection.prepare(query);
-                statement.bind(parameters);
+                statement = databaseConnection.prepare(query);
+                if (parameters) {
+                    parameters = parameters.map(p => typeof p !== 'undefined' ? p : null);
+
+                    statement.bind(parameters);
+                }
                 
                 // log slow queries if maxQueryExecution time is set
                 const maxQueryExecutionTime = this.driver.connection.options.maxQueryExecutionTime;
@@ -70,6 +75,10 @@ export class SqljsQueryRunner extends AbstractSqliteQueryRunner {
                 ok(result);
             }
             catch (e) {
+                if (statement) {
+                    statement.free();
+                }
+
                 this.driver.connection.logger.logQueryError(e, query, parameters, this);
                 fail(new QueryFailedError(query, parameters, e));
             }

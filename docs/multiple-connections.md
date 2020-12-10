@@ -76,7 +76,7 @@ Downside for might be that you'll need to manage and work with multiple connecti
 ## Using multiple databases in a single connection
 
 If you don't want to create multiple connections, 
-but want to use multiple databases in a single database,
+but want to use multiple databases in a single connection,
 you can specify database name per-entity you use:
 
 ```typescript
@@ -130,7 +130,7 @@ const users = await connection
 This code will produce following sql query (depend on database type):
 
 ```sql
-SELECT * FROM "secondDB"."question" "question", "thirdDB"."photo" "photo" 
+SELECT * FROM "secondDB"."user" "user", "thirdDB"."photo" "photo" 
     WHERE "photo"."userId" = "user"."id"
 ```
 
@@ -275,15 +275,36 @@ Example of replication connection settings:
 ```
 
 All schema update and write operations are performed using `master` server.
-All simple queries performed by find methods or select query builder are using a random `slave` instance. 
+All simple queries performed by find methods or select query builder are using a random `slave` instance.
+All queries performed by query method are performed using the `master` instance.
 
-If you want to explicitly use master in SELECT created by query builder, you can use following code:
+If you want to explicitly use master in SELECT created by query builder, you can use the following code:
 
 ```typescript
-const postsFromMaster = await connection.createQueryBuilder(Post, "post")
-    .setQueryRunner(connection.createQueryRunner("master"))
-    .getMany();
+const masterQueryRunner = connection.createQueryRunner("master");
+try {
+    const postsFromMaster = await connection.createQueryBuilder(Post, "post")
+        .setQueryRunner(masterQueryRunner)
+        .getMany();
+} finally {
+      await masterQueryRunner.release();
+}
+        
 ```
+
+If you want to use `slave` in raw queries, you also need to explicitly specify the query runner.
+
+```typescript
+
+const slaveQueryRunner = connection.createQueryRunner("slave");
+try {
+    const userFromSlave = await connection.query('SELECT * FROM users WHERE id = $1', [userId], slaveQueryRunner);
+} finally {
+    return slaveQueryRunner.release();
+}
+```
+
+Note that connection created by a `QueryRunner` need to be explicitly released.
 
 Replication is supported by mysql, postgres and sql server databases.
 

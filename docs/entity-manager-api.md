@@ -120,13 +120,21 @@ await manager.remove([
 ]);
 ```
 
-* `insert` - Inserts a new entity.
+* `insert` - Inserts a new entity, or array of entities.
 
 ```typescript
 await manager.insert(User, { 
     firstName: "Timber", 
     lastName: "Timber" 
 });
+
+await manager.insert(User, [{ 
+    firstName: "Foo", 
+    lastName: "Bar" 
+}, { 
+    firstName: "Rizz", 
+    lastName: "Rak" 
+}]);
 ```
 
 * `update` - Partially updates entity by a given update options or entity id.
@@ -161,7 +169,7 @@ await manager.increment(User, { firstName: "Timber" }, "age", 3);
 
 * `decrement` - Decrements some column by provided value that match given options.
 ```typescript
-await manager.count(User, { firstName: "Timber" }, "age", 3);
+await manager.decrement(User, { firstName: "Timber" }, "age", 3);
 ```
 
 * `find` - Finds entities that match given options.
@@ -206,14 +214,14 @@ await manager.clear(User);
 ```
 
 * `getRepository` - Gets `Repository` to perform operations on a specific entity.
- Learn more about [Repositories](working-with-entity-manager.md).
+ Learn more about [Repositories](working-with-repository.md).
 
 ```typescript
 const userRepository = manager.getRepository(User);
 ```
 
 * `getTreeRepository` - Gets `TreeRepository` to perform operations on a specific entity.
- Learn more about [Repositories](working-with-entity-manager.md).
+ Learn more about [Repositories](working-with-repository.md).
 
 ```typescript
 const categoryRepository = manager.getTreeRepository(Category);
@@ -227,7 +235,7 @@ const userRepository = manager.getMongoRepository(User);
 ```
 
 * `getCustomRepository` - Gets custom entity repository.
- Learn more about [Custom repositories](working-with-entity-manager.md).
+ Learn more about [Custom repositories](custom-repository.md).
 
 ```typescript
 const myUserRepository = manager.getCustomRepository(UserRepository);

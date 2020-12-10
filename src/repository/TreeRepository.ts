@@ -33,7 +33,7 @@ export class TreeRepository<Entity> extends Repository<Entity> {
         const escapeAlias = (alias: string) => this.manager.connection.driver.escape(alias);
         const escapeColumn = (column: string) => this.manager.connection.driver.escape(column);
         const parentPropertyName = this.manager.connection.namingStrategy.joinColumnName(
-          this.metadata.treeParentRelation!.propertyName, "id"
+          this.metadata.treeParentRelation!.propertyName, this.metadata.primaryColumns[0].propertyName
         );
 
         return this.createQueryBuilder("treeEntity")
@@ -248,9 +248,14 @@ export class TreeRepository<Entity> extends Repository<Entity> {
 
     protected createRelationMaps(alias: string, rawResults: any[]): { id: any, parentId: any }[] {
         return rawResults.map(rawResult => {
+            const joinColumn = this.metadata.treeParentRelation!.joinColumns[0];
+            // fixes issue #2518, default to databaseName property when givenDatabaseName is not set
+            const joinColumnName = joinColumn.givenDatabaseName || joinColumn.databaseName;
+            const id = rawResult[alias + "_" + this.metadata.primaryColumns[0].databaseName];
+            const parentId = rawResult[alias + "_" + joinColumnName];
             return {
-                id: rawResult[alias + "_" + this.metadata.primaryColumns[0].databaseName],
-                parentId: rawResult[alias + "_" + this.metadata.treeParentRelation!.joinColumns[0].givenDatabaseName]
+                id: this.manager.connection.driver.prepareHydratedValue(id, this.metadata.primaryColumns[0]),
+                parentId: this.manager.connection.driver.prepareHydratedValue(parentId, joinColumn),
             };
         });
     }
@@ -259,8 +264,8 @@ export class TreeRepository<Entity> extends Repository<Entity> {
         const childProperty = this.metadata.treeChildrenRelation!.propertyName;
         const parentEntityId = this.metadata.primaryColumns[0].getEntityValue(entity);
         const childRelationMaps = relationMaps.filter(relationMap => relationMap.parentId === parentEntityId);
-        const childIds = childRelationMaps.map(relationMap => relationMap.id);
-        entity[childProperty] = entities.filter(entity => childIds.indexOf(entity.id) !== -1);
+        const childIds = new Set(childRelationMaps.map(relationMap => relationMap.id));
+        entity[childProperty] = entities.filter(entity => childIds.has(entity[this.metadata.primaryColumns[0].propertyName]));
         entity[childProperty].forEach((childEntity: any) => {
             this.buildChildrenEntityTree(childEntity, entities, relationMaps);
         });

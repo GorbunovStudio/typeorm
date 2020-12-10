@@ -1,16 +1,17 @@
 import {ConnectionOptionsReader} from "../connection/ConnectionOptionsReader";
 import {CommandUtils} from "./CommandUtils";
-const chalk = require("chalk");
+import * as yargs from "yargs";
+import chalk from "chalk";
 
 /**
  * Generates a new entity.
  */
-export class EntityCreateCommand {
+export class EntityCreateCommand implements yargs.CommandModule {
     command = "entity:create";
     describe = "Generates a new entity.";
 
-    builder(yargs: any) {
-        return yargs
+    builder(args: yargs.Argv) {
+        return args
             .option("c", {
                 alias: "connection",
                 default: "default",
@@ -32,22 +33,28 @@ export class EntityCreateCommand {
             });
     }
 
-    async handler(argv: any) {
+    async handler(args: yargs.Arguments) {
         try {
-            const fileContent = EntityCreateCommand.getTemplate(argv.name);
-            const filename = argv.name + ".ts";
-            let directory = argv.dir;
+            const fileContent = EntityCreateCommand.getTemplate(args.name as any);
+            const filename = args.name + ".ts";
+            let directory = args.dir as string | undefined;
 
             // if directory is not set then try to open tsconfig and find default path there
             if (!directory) {
                 try {
-                    const connectionOptionsReader = new ConnectionOptionsReader({ root: process.cwd(), configName: argv.config });
-                    const connectionOptions = await connectionOptionsReader.get(argv.connection);
-                    directory = connectionOptions.cli ? connectionOptions.cli.entitiesDir : undefined;
+                    const connectionOptionsReader = new ConnectionOptionsReader({
+                        root: process.cwd(),
+                        configName: args.config as any
+                    });
+                    const connectionOptions = await connectionOptionsReader.get(args.connection as any);
+                    directory = connectionOptions.cli ? (connectionOptions.cli.entitiesDir || "") : "";
                 } catch (err) { }
             }
 
-            const path = process.cwd() + "/" + (directory ? (directory + "/") : "") + filename;
+            if (directory && !directory.startsWith("/")) {
+                directory = process.cwd() + "/" + directory;
+            }
+            const path = (directory ? (directory + "/") : "") + filename;
             const fileExists = await CommandUtils.fileExists(path);
             if (fileExists) {
                 throw `File ${chalk.blue(path)} already exists`;

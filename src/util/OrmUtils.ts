@@ -15,7 +15,7 @@ export class OrmUtils {
         });
     }
 
-    static splitClassesAndStrings<T>(clsesAndStrings: (string|T)[]): [T[], string[]] {
+    static splitClassesAndStrings<T>(clsesAndStrings: (string | T)[]): [T[], string[]] {
         return [
             (clsesAndStrings).filter((cls): cls is T => typeof cls !== "string"),
             (clsesAndStrings).filter((str): str is string => typeof str === "string"),
@@ -37,7 +37,7 @@ export class OrmUtils {
 
     static uniq<T>(array: T[], criteria?: (item: T) => any): T[];
     static uniq<T, K extends keyof T>(array: T[], property: K): T[];
-    static uniq<T, K extends keyof T>(array: T[], criteriaOrProperty?: ((item: T) => any)|K): T[] {
+    static uniq<T, K extends keyof T>(array: T[], criteriaOrProperty?: ((item: T) => any) | K): T[] {
         return array.reduce((uniqueArray, item) => {
             let found: boolean = false;
             if (criteriaOrProperty instanceof Function) {
@@ -73,19 +73,21 @@ export class OrmUtils {
 
         if (this.isObject(target) && this.isObject(source)) {
             for (const key in source) {
-                let propertyKey = key;
-                if (source[key] instanceof Promise)
+                const value = source[key];
+                if (key === "__proto__" || value instanceof Promise)
                     continue;
 
-                // if (source[key] instanceof Promise) {
-                //     propertyKey = "__" + key + "__";
-                // }
-
-                if (this.isObject(source[propertyKey]) && !(source[propertyKey] instanceof Date) && !(source[propertyKey] instanceof Buffer)) {
-                    if (!target[key]) Object.assign(target, { [key]: {} });
-                    this.mergeDeep(target[key], source[propertyKey]);
+                if (this.isObject(value)
+                && !(value instanceof Map)
+                && !(value instanceof Set)
+                && !(value instanceof Date)
+                && !(value instanceof Buffer)
+                && !(value instanceof RegExp)) {
+                    if (!target[key])
+                        Object.assign(target, { [key]: Object.create(Object.getPrototypeOf(value)) });
+                    this.mergeDeep(target[key], value);
                 } else {
-                    Object.assign(target, { [key]: source[propertyKey] });
+                    Object.assign(target, { [key]: value });
                 }
             }
         }
@@ -98,7 +100,7 @@ export class OrmUtils {
      *
      * @see http://stackoverflow.com/a/1144249
      */
-    static deepCompare(...args: any[]) {
+    static deepCompare(...args: any[]): boolean {
         let i: any, l: any, leftChain: any, rightChain: any;
 
         if (arguments.length < 1) {
@@ -117,6 +119,26 @@ export class OrmUtils {
         }
 
         return true;
+    }
+
+    /**
+     * Check if two entity-id-maps are the same
+     */
+    static compareIds(firstId: ObjectLiteral|undefined, secondId: ObjectLiteral|undefined): boolean {
+        if (firstId === undefined || firstId === null || secondId === undefined || secondId === null)
+            return false;
+
+        // Optimized version for the common case
+        if (
+            ((typeof firstId.id === "string" && typeof secondId.id === "string") ||
+            (typeof firstId.id === "number" && typeof secondId.id === "number")) &&
+            Object.keys(firstId).length === 1 &&
+            Object.keys(secondId).length === 1
+        ) {
+            return firstId.id === secondId.id;
+        }
+
+        return OrmUtils.deepCompare(firstId, secondId);
     }
 
     /**
@@ -164,7 +186,7 @@ export class OrmUtils {
 
         // remember that NaN === NaN returns false
         // and isNaN(undefined) returns true
-        if (isNaN(x) && isNaN(y) && typeof x === "number" && typeof y === "number")
+        if (Number.isNaN(x) && Number.isNaN(y))
             return true;
 
         // Compare primitives and functions.
@@ -173,7 +195,14 @@ export class OrmUtils {
         if (x === y)
             return true;
 
-        if (x.equals instanceof Function && x.equals(y))
+        // Unequal, but either is null or undefined (use case: jsonb comparasion)
+        // PR #3776, todo: add tests
+        if (x === null || y === null || x === undefined || y === undefined)
+          return false;
+
+        // Fix the buffer compare bug.
+        // See: https://github.com/typeorm/typeorm/issues/3654
+        if ((typeof x.equals === "function" || x.equals instanceof Function) && x.equals(y))
             return true;
 
         // Works in case when functions are created in constructor.

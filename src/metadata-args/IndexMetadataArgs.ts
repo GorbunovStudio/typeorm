@@ -34,6 +34,12 @@ export interface IndexMetadataArgs {
      * Works only in MySQL.
      */
     fulltext?: boolean;
+    
+    /**
+     * Fulltext parser.
+     * Works only in MySQL.
+     */
+    parser?: string;
 
     /**
      * Index filter condition.
@@ -51,4 +57,16 @@ export interface IndexMetadataArgs {
      * This option is only supported for mongodb database.
      */
     sparse?: boolean;
+
+    /**
+     * Builds the index in the background so that building an index an does not block other database activities.
+     * This option is only supported for mongodb database.
+     */
+    background?: boolean;
+
+    /**
+     * Specifies a time to live, in seconds.
+     * This option is only supported for mongodb database.
+     */
+    expireAfterSeconds?: number;
 }

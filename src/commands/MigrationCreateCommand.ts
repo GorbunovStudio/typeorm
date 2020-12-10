@@ -1,18 +1,20 @@
 import {ConnectionOptionsReader} from "../connection/ConnectionOptionsReader";
 import {CommandUtils} from "./CommandUtils";
 import {camelCase} from "../util/StringUtils";
-const chalk = require("chalk");
+import * as yargs from "yargs";
+import chalk from "chalk";
 
 /**
  * Creates a new migration file.
  */
-export class MigrationCreateCommand {
+export class MigrationCreateCommand implements yargs.CommandModule {
 
     command = "migration:create";
     describe = "Creates a new migration file.";
+    aliases = "migrations:create";
 
-    builder(yargs: any) {
-        return yargs
+    builder(args: yargs.Argv) {
+        return args
             .option("c", {
                 alias: "connection",
                 default: "default",
@@ -34,23 +36,33 @@ export class MigrationCreateCommand {
             });
     }
 
-    async handler(argv: any) {
+    async handler(args: yargs.Arguments) {
+        if (args._[0] === "migrations:create") {
+            console.log("'migrations:create' is deprecated, please use 'migration:create' instead");
+        }
+
         try {
             const timestamp = new Date().getTime();
-            const fileContent = MigrationCreateCommand.getTemplate(argv.name, timestamp);
-            const filename = timestamp + "-" + argv.name + ".ts";
-            let directory = argv.dir;
+            const fileContent = MigrationCreateCommand.getTemplate(args.name as any, timestamp);
+            const filename = timestamp + "-" + args.name + ".ts";
+            let directory = args.dir as string | undefined;
 
             // if directory is not set then try to open tsconfig and find default path there
             if (!directory) {
                 try {
-                    const connectionOptionsReader = new ConnectionOptionsReader({ root: process.cwd(), configName: argv.config });
-                    const connectionOptions = await connectionOptionsReader.get(argv.connection);
-                    directory = connectionOptions.cli ? connectionOptions.cli.migrationsDir : undefined;
+                    const connectionOptionsReader = new ConnectionOptionsReader({
+                        root: process.cwd(),
+                        configName: args.config as any
+                    });
+                    const connectionOptions = await connectionOptionsReader.get(args.connection as any);
+                    directory = connectionOptions.cli ? (connectionOptions.cli.migrationsDir || "") : "";
                 } catch (err) { }
             }
 
-            const path = process.cwd() + "/" + (directory ? (directory + "/") : "") + filename;
+            if (directory && !directory.startsWith("/")) {
+                directory = process.cwd() + "/" + directory;
+            }
+            const path = (directory ? (directory + "/") : "") + filename;
             await CommandUtils.createFile(path, fileContent);
             console.log(`Migration ${chalk.blue(path)} has been generated successfully.`);
 
@@ -73,10 +85,10 @@ export class MigrationCreateCommand {
 
 export class ${camelCase(name, true)}${timestamp} implements MigrationInterface {
 
-    public async up(queryRunner: QueryRunner): Promise<any> {
+    public async up(queryRunner: QueryRunner): Promise<void> {
     }
 
-    public async down(queryRunner: QueryRunner): Promise<any> {
+    public async down(queryRunner: QueryRunner): Promise<void> {
     }
 
 }

@@ -3,13 +3,16 @@
 * [What is `ConnectionOptions`](#what-is-connectionoptions)
 * [Common connection options](#common-connection-options)
 * [`mysql` / `mariadb` connection options](#mysql--mariadb-connection-options)
-* [`postgres` connection options](#postgres-connection-options)
+* [`postgres` / `cockroachdb` connection options](#postgres--cockroachdb-connection-options)
 * [`sqlite` connection options](#sqlite-connection-options)
+* [`better-sqlite3` connection options](#better-sqlite3-connection-options)
 * [`cordova` connection options](#cordova-connection-options)
 * [`react-native` connection options](#react-native-connection-options)
+* [`nativescript` connection options](#nativescript-connection-options)
 * [`mssql` connection options](#mssql-connection-options)
 * [`mongodb` connection options](#mongodb-connection-options)
 * [`sql.js` connection options](#sqljs-connection-options)
+* [`expo` connection options](#expo-connection-options)
 * [Connection options example](#connection-options-example)
     
 ## What is `ConnectionOptions`
@@ -20,7 +23,8 @@ Connection options is a connection configuration you pass to `createConnection`
 ## Common connection options
 
 * `type` - Database type. You must specify what database engine you use.
- Possible values are "mysql", "postgres", "mariadb", "sqlite", "cordova", "oracle", "mssql", "mongodb", "sqljs", "react-native". 
+ Possible values are "mysql", "postgres", "cockroachdb", "mariadb", "sqlite", "better-sqlite3", "cordova", "nativescript",
+ "oracle", "mssql", "mongodb", "sqljs", "react-native".
  This option is **required**.
 
 * `name` - Connection name. You'll use it to get connection you need using `getConnection(name: string)` 
@@ -31,23 +35,18 @@ If connection name is not given then it will be called "default".
 * `extra` - Extra connection options to be passed to the underlying driver. 
 Use it if you want to pass extra settings to underlying database driver.
 
-* `entities` - Entities to be loaded and used for this connection.
-Accepts both entity classes and directories paths to load from.
+* `entities` - Entities, or Entity Schemas, to be loaded and used for this connection.
+Accepts both entity classes, entity schema classes, and directories paths to load from.
 Directories support glob patterns.
 Example: `entities: [Post, Category, "entity/*.js", "modules/**/entity/*.js"]`.
-Learn more about [Entities](./entities.md).
+Learn more about [Entities](./entities.md). 
+Learn more about [Entity Schemas](separating-entity-definition.md).
 
 * `subscribers` - Subscribers to be loaded and used for this connection.
 Accepts both entity classes and directories to load from.
 Directories support glob patterns.
 Example: `subscribers: [PostSubscriber, AppSubscriber, "subscriber/*.js", "modules/**/subscriber/*.js"]`.
 Learn more about [Subscribers](listeners-and-subscribers.md).
-
-* `entitySchemas` - Entity schemas to be loaded and used for this connection.
-Accepts both entity schema classes and directories to load from.
-Directories support glob patterns.
-Example: `entitySchemas: [PostSchema, CategorySchema, "entity-schema/*.json", "modules/**/entity-schema/*.json"]`.
-Learn more about [Entity Schemas](./schema-in-files.md).
 
 * `migrations` - Migrations to be loaded and used for this connection.
 Accepts both migration classes and directories to load from.
@@ -84,7 +83,7 @@ This option is useful during debug and development.
  Instead, it syncs just by creating indices.
 
 * `migrationsRun` - Indicates if migrations should be auto run on every application launch.
-As an alternative, you can use CLI and run migrations:run command.
+As an alternative, you can use CLI and run migration:run command.
 
 * `migrationsTableName` - Name of the table in the database which is going to contain information about executed migrations.
 By default this table is called "migrations".
@@ -100,7 +99,7 @@ Read more about caching [here](./caching.md).
 
 ## `mysql` / `mariadb` connection options
 
-* `url` - Connection url where perform connection to.
+* `url` - Connection url where perform connection to. Please note that other connection options will override parameters set from url.
 
 * `host` - Database host.
 
@@ -121,15 +120,17 @@ values to JavaScript Date object and vice versa. This can be `local`, `Z`, or an
 
 * `connectTimeout` - The milliseconds before a timeout occurs during the initial connection to the MySQL server.
  (Default: `10000`)
+
+* `acquireTimeout` - The milliseconds before a timeout occurs during the initial connection to the MySql server. It differs from `connectTimeout` as it governs the TCP connection timeout where as connectTimeout does not. (default: `10000`)
  
 * `insecureAuth` - Allow connecting to MySQL instances that ask for the old (insecure) authentication method. 
 (Default: `false`)
  
 * `supportBigNumbers` - When dealing with big numbers (`BIGINT` and `DECIMAL` columns) in the database, 
-you should enable this option (Default: `false`)
+you should enable this option (Default: `true`)
  
 * `bigNumberStrings` - Enabling both `supportBigNumbers` and `bigNumberStrings` forces big numbers 
-(`BIGINT` and `DECIMAL` columns) to be always returned as JavaScript String objects (Default: `false`). 
+(`BIGINT` and `DECIMAL` columns) to be always returned as JavaScript String objects (Default: `true`). 
 Enabling `supportBigNumbers` but leaving `bigNumberStrings` disabled will return big numbers as String 
 objects only when they cannot be accurately represented with 
 [JavaScript Number objects](http://ecma262-5.com/ELS5_HTML.htm#Section_8.5) 
@@ -149,15 +150,17 @@ Slight performance penalty for most calls. (Default: `true`)
 * `multipleStatements` - Allow multiple mysql statements per query. Be careful with this, it could increase the scope 
 of SQL injection attacks. (Default: `false`)
 
+* `legacySpatialSupport` - Use spatial functions like GeomFromText and AsText which are removed in MySQL 8. (Default: true)
+
 * `flags` - List of connection flags to use other than the default ones. It is also possible to blacklist default ones.
  For more information, check [Connection Flags](https://github.com/mysqljs/mysql#connection-flags).
  
 * `ssl` -  object with ssl parameters or a string containing the name of ssl profile. 
 See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
 
-## `postgres` connection options
+## `postgres` / `cockroachdb` connection options
 
-* `url` - Connection url where perform connection to.
+* `url` - Connection url where perform connection to. Please note that other connection options will override parameters set from url.
 
 * `host` - Database host.
 
@@ -171,11 +174,27 @@ See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
 
 * `schema` - Schema name. Default is "public".
 
+* `connectTimeoutMS` - The milliseconds before a timeout occurs during the initial connection to the postgres server. If `undefined`, or set to `0`, there is no timeout. Defaults to `undefined`. 
+
 * `ssl` - Object with ssl parameters. See [TLS/SSL](https://node-postgres.com/features/ssl).
+
+* `uuidExtension` - The Postgres extension to use when generating UUIDs. Defaults to `uuid-ossp`. Can be changed to `pgcrypto` if the `uuid-ossp` extension is unavailable.
+
+* `poolErrorHandler` - A function that get's called when underlying pool emits `'error'` event. Takes single parameter (error instance) and defaults to logging with `warn` level.
+
+* `logNotifications` - A boolean to determine whether postgres server [notice messages](https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html) and [notification events](https://www.postgresql.org/docs/current/sql-notify.html) should be included in client's logs with `info` level (default: `false`).
 
 ## `sqlite` connection options
 
 * `database` - Database path. For example "./mydb.sql"
+
+## `better-sqlite3` connection options
+
+* `database` - Database path. For example "./mydb.sql"
+
+* `statementCacheSize` - Cache size of sqlite statement to speed up queries (default 100).
+
+* `prepareDatabase` - Function to run before a database is used in typeorm. You can access original better-sqlite3 Database object here.
 
 ## `cordova` connection options
 
@@ -188,9 +207,12 @@ See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
 
 * `location` - Where to save the database. See [react-native-sqlite-storage](https://github.com/andpor/react-native-sqlite-storage#opening-a-database) for options.
 
+## `nativescript` connection options
+* `database` - Database name
+
 ## `mssql` connection options
 
-* `url` - Connection url where perform connection to.
+* `url` - Connection url where perform connection to. Please note that other connection options will override parameters set from url.
 
 * `host` - Database host.
 
@@ -237,7 +259,7 @@ See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
  
 * `pool.autostart` - boolean, should the pool start creating resources etc once the constructor is called, (default `true`).
 
-* `pool.victionRunIntervalMillis` - How often to run eviction checks. Default: `0` (does not run).
+* `pool.evictionRunIntervalMillis` - How often to run eviction checks. Default: `0` (does not run).
 
 * `pool.numTestsPerRun` - Number of resources to check each eviction run. Default: `3`.
 
@@ -248,10 +270,14 @@ See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
 * `pool.idleTimeoutMillis` -  the minimum amount of time that an object may sit idle in the pool before it is eligible for
  eviction due to idle time. Supersedes `softIdleTimeoutMillis`. Default: `30000`.
  
+ * `pool.errorHandler` - A function that get's called when underlying pool emits `'error'` event. Takes single parameter (error instance) and defaults to logging with `warn` level.
+ 
 * `options.fallbackToDefaultDb` - By default, if the database requestion by `options.database` cannot be accessed, the connection
  will fail with an error. However, if `options.fallbackToDefaultDb` is set to `true`, then the user's default database will
   be used instead (Default: `false`).
   
+* `options.instanceName` - The instance name to connect to. The SQL Server Browser service must be running on the database server, and UDP port 1434 on the database server must be reachable. Mutually exclusive with `port`. (no default).
+
 * `options.enableAnsiNullDefault` - If true, SET ANSI_NULL_DFLT_ON ON will be set in the initial sql. This means new
  columns will be nullable by default. See the [T-SQL documentation](https://msdn.microsoft.com/en-us/library/ms187375.aspx)
  for more details. (Default: `true`).
@@ -338,11 +364,15 @@ See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
 
 ## `mongodb` connection options
 
-* `url` - Connection url where perform connection to.
+* `url` - Connection url where perform connection to. Please note that other connection options will override parameters set from url.
 
 * `host` - Database host.
 
 * `port` - Database host port. Default mongodb port is `27017`.
+
+* `username` - Database username (replacement for `auth.user`).
+
+* `password` - Database password (replacement for `auth.password`).
 
 * `database` - Database name.
 
@@ -451,11 +481,20 @@ See [SSL options](https://github.com/mysqljs/mysql#ssl-options).
 
 * `database`: The raw UInt8Array database that should be imported.
 
+* `sqlJsConfig`: Optional initialize config for sql.js.
+
 * `autoSave`: Whether or not autoSave should be disabled. If set to true the database will be saved to the given file location (Node.js) or LocalStorage element (browser) when a change happens and `location` is specified. Otherwise `autoSaveCallback` can be used.
 
 * `autoSaveCallback`: A function that get's called when changes to the database are made and `autoSave` is enabled. The function gets a `UInt8Array` that represents the database.
 
 * `location`: The file location to load and save the database to.
+
+* `useLocalForage`: Enables the usage of the localforage library (https://github.com/localForage/localForage) to save & load the database asynchronously from the indexedDB instead of using the synchron local storage methods in a browser environment. The localforage node module needs to be added to your project and the localforage.js should be imported in your page.
+
+## `expo` connection options
+
+* `database` - Name of the database. For example, "mydb".
+* `driver` - The Expo SQLite module. For example, `require('expo-sqlite')`.
 
 ## Connection options example
 

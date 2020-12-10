@@ -9,7 +9,7 @@ import {Question} from "./model/Question";
 import {Blog} from "./entity/Blog";
 import {Category} from "./entity/Category";
 import {DeepPartial} from "../../../../src/common/DeepPartial";
-import {EntitySchema} from "../../../../src";
+import {EntitySchema, Repository} from "../../../../src";
 
 describe("repository > basic methods", () => {
 
@@ -43,7 +43,7 @@ describe("repository > basic methods", () => {
         }));
 
     });
-    
+
     describe("hasId", function() {
 
         it("should return true if entity has an id", () => connections.forEach(connection => {
@@ -152,13 +152,14 @@ describe("repository > basic methods", () => {
         }));
 
         it("should create a new empty object if entity schema is used", () => connections.forEach(connection => {
-            const repository = connection.getRepository("User");
+            const repository = connection.getRepository("User") as Repository<User>;
             repository.create().should.be.eql({});
         }));
 
         it("should create a new empty object if entity schema with a target is used", () => connections.forEach(connection => {
             const repository = connection.getRepository<Question>("Question");
-            repository.create().should.not.be.empty;
+            repository.create().should.not.be.undefined;
+            repository.create().should.not.be.null;
             repository.create().type.should.be.equal("question"); // make sure this is our Question function
         }));
 
@@ -221,7 +222,7 @@ describe("repository > basic methods", () => {
             blog.text = "Blog about good people";
             blog.categories = [category];
             await blogRepository.save(blog);
-            
+
             // and preload it
             const plainBlogWithId = { id: 1 };
             const preloadedBlog = await blogRepository.preload(plainBlogWithId);
@@ -246,7 +247,7 @@ describe("repository > basic methods", () => {
             blog.text = "Blog about good people";
             blog.categories = [category];
             await blogRepository.save(blog);
-            
+
             // and preload it
             const plainBlogWithId = { id: 1, categories: [{ id: 1 }] };
             const preloadedBlog = await blogRepository.preload(plainBlogWithId);
@@ -323,8 +324,7 @@ describe("repository > basic methods", () => {
     });
 
     describe("save", function () {
-        it("should update existing entity using transformers", async () => {
-            const connection = connections.find((c: Connection) => c.name === "sqlite");
+        it("should update existing entity using transformers", () => Promise.all(connections.filter(c => c.name === "sqlite" || c.name === "better-sqlite3").map(async connection => {
             if (!connection || (connection.options as any).skip === true) {
                 return;
             }
@@ -348,12 +348,12 @@ describe("repository > basic methods", () => {
             const saved = await postRepository.save(dbPost);
 
             saved.should.be.instanceOf(Post);
-            
+
             saved.id!.should.be.equal(1);
             saved.title.should.be.equal("New title");
             saved.dateAdded.should.be.instanceof(Date);
             saved.dateAdded.getTime().should.be.equal(date.getTime());
-        });
+        })));
     });
 
     describe("preload also should also implement merge functionality", function() {
@@ -415,8 +415,8 @@ describe("repository > basic methods", () => {
             const query = `SELECT MAX(${connection.driver.escape("blog")}.${connection.driver.escape("counter")}) as ${connection.driver.escape("max")} ` +
                 ` FROM ${connection.driver.escape("blog")} ${connection.driver.escape("blog")}`;
             const result = await repository.query(query);
-            result[0].should.not.be.empty;
-            result[0].max.should.not.be.empty;
+            result[0].should.not.be.undefined;
+            result[0].max.should.not.be.undefined;
         })));
 
     });

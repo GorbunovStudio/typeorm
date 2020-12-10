@@ -3,6 +3,8 @@
 * [NodeJS](#nodejs)
 * [Browser](#browser)
 * [Cordova / PhoneGap / Ionic apps](#cordova--phonegap--ionic-apps)
+* [React Native](#react-native)
+* [Expo](#expo)
 * [NativeScript](#nativescript)
 
 ## NodeJS
@@ -11,7 +13,7 @@ TypeORM was tested on Node.js version 4 and above.
 
 ## Browser
 
-You can use [sql.js](https://github.com/kripken/sql.js) in the browser.
+You can use [sql.js](https://sql.js.org) in the browser.
 
 **Webpack configuration**
     
@@ -24,10 +26,12 @@ plugins: [
         result.request = result.request.replace(/typeorm/, "typeorm/browser");
     }),
     new webpack.ProvidePlugin({
-      'window.SQL': 'sql.js/js/sql.js'
+      'window.SQL': 'sql.js/dist/sql-wasm.js'
     })
 ]
 ```
+
+and make sure [sql-wasm.wasm file](https://github.com/sql-js/sql.js/blob/master/README.md#downloadingusing) exists in your public path.
 
 **Example of configuration**
 
@@ -43,7 +47,7 @@ createConnection({
 
 **Don't forget to include reflect-metadata**
     
-In your main html page, you need to include refllect-metadata:
+In your main html page, you need to include reflect-metadata:
 
 ```html
 <script src="./node_modules/reflect-metadata/Reflect.js"></script>
@@ -57,10 +61,36 @@ You have the option to choose between module loaders just like in browser packag
 For an example how to use TypeORM in Cordova see [typeorm/cordova-example](https://github.com/typeorm/cordova-example) and for Ionic see [typeorm/ionic-example](https://github.com/typeorm/ionic-example). **Important**: For use with Ionic, a custom webpack config file is needed! Please checkout the example to see the needed changes.
 
 ## React Native
-TypeORM is able to on React Native apps using the [react-native-sqlite-storage](https://github.com/andpor/react-native-sqlite-storage) plugin. For an example see [typeom/react-native-example](https://github.com/typeorm/react-native-example).
+TypeORM is able to run on React Native apps using the [react-native-sqlite-storage](https://github.com/andpor/react-native-sqlite-storage) plugin. For an example see [typeorm/react-native-example](https://github.com/typeorm/react-native-example).
+
+## Expo
+
+TypeORM is able to run on Expo apps using the [Expo SQLite API](https://docs.expo.io/versions/latest/sdk/sqlite/). For an example how to use TypeORM in Expo see [typeorm/expo-example](https://github.com/typeorm/expo-example).
 
 ## NativeScript
 
-In the next releases we are planning to support NativeScript platform as well.
+1. `tns install webpack` (read below why webpack is required)
+2. `tns plugin add nativescript-sqlite`
+3. Create Database connection in your app's entry point
+    ```typescript
+    import driver from 'nativescript-sqlite'
 
-Please feel free to join a community and help us with new features and supporting a new platform!
+    const connection = await createConnection({
+        database: 'test.db',
+        type: 'nativescript',
+        driver,
+        entities: [
+            Todo //... whatever entities you have
+        ],
+        logging: true
+    })
+    ```
+
+Note: This works only with NativeScript 4.x and above
+
+_When using with NativeScript, **using webpack is compulsory**.
+The `typeorm/browser` package is raw ES7 code with `import/export`
+which will **NOT** run as it is. It has to be bundled.
+Please use the `tns run --bundle` method_
+
+Checkout example [here](https://github.com/championswimmer/nativescript-vue-typeorm-sample)!

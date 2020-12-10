@@ -12,6 +12,8 @@ import {TableColumn} from "../../schema-builder/table/TableColumn";
 import {BaseConnectionOptions} from "../../connection/BaseConnectionOptions";
 import {EntityMetadata} from "../../metadata/EntityMetadata";
 import {OrmUtils} from "../../util/OrmUtils";
+import {ApplyValueTransformers} from "../../util/ApplyValueTransformers";
+import {ReplicationMode} from "../types/ReplicationMode";
 
 /**
  * Organizes communication with sqlite DBMS.
@@ -129,12 +131,31 @@ export abstract class AbstractSqliteDriver implements Driver {
     /**
      * Gets list of column data types that support precision by a driver.
      */
-    withPrecisionColumnTypes: ColumnType[] = [];
+    withPrecisionColumnTypes: ColumnType[] = [
+        "real",
+        "double",
+        "double precision",
+        "float",
+        "real",
+        "numeric",
+        "decimal",
+        "date",
+        "time",
+        "datetime"
+    ];
 
     /**
      * Gets list of column data types that support scale by a driver.
      */
-    withScaleColumnTypes: ColumnType[] = [];
+    withScaleColumnTypes: ColumnType[] = [
+        "real",
+        "double",
+        "double precision",
+        "float",
+        "real",
+        "numeric",
+        "decimal",
+    ];
 
     /**
      * Orm has special columns and we need to know what database column types should be for those types.
@@ -145,6 +166,8 @@ export abstract class AbstractSqliteDriver implements Driver {
         createDateDefault: "datetime('now')",
         updateDate: "datetime",
         updateDateDefault: "datetime('now')",
+        deleteDate: "datetime",
+        deleteDateNullable: true,
         version: "integer",
         treeLevel: "integer",
         migrationId: "integer",
@@ -156,6 +179,12 @@ export abstract class AbstractSqliteDriver implements Driver {
         cacheDuration: "int",
         cacheQuery: "text",
         cacheResult: "text",
+        metadataType: "varchar",
+        metadataDatabase: "varchar",
+        metadataSchema: "varchar",
+        metadataTable: "varchar",
+        metadataName: "varchar",
+        metadataValue: "text",
     };
 
     /**
@@ -163,6 +192,12 @@ export abstract class AbstractSqliteDriver implements Driver {
      * Used in the cases when length/precision/scale is not specified by user.
      */
     dataTypeDefaults: DataTypeDefaults;
+
+    /**
+     * No documentation specifying a maximum length for identifiers could be found
+     * for SQLite.
+     */
+    maxAliasLength?: number;
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -180,7 +215,7 @@ export abstract class AbstractSqliteDriver implements Driver {
     /**
      * Creates a query runner used to execute database queries.
      */
-    abstract createQueryRunner(mode: "master"|"slave"): QueryRunner;
+    abstract createQueryRunner(mode: ReplicationMode): QueryRunner;
 
     // -------------------------------------------------------------------------
     // Public Methods
@@ -222,7 +257,7 @@ export abstract class AbstractSqliteDriver implements Driver {
      */
     preparePersistentValue(value: any, columnMetadata: ColumnMetadata): any {
         if (columnMetadata.transformer)
-            value = columnMetadata.transformer.to(value);
+            value = ApplyValueTransformers.transformTo(columnMetadata.transformer, value);
 
         if (value === null || value === undefined)
             return value;
@@ -246,6 +281,8 @@ export abstract class AbstractSqliteDriver implements Driver {
 
         } else if (columnMetadata.type === "simple-json") {
             return DateUtils.simpleJsonToString(value);
+        } else if (columnMetadata.type === "simple-enum") {
+            return DateUtils.simpleEnumToString(value);
         }
 
         return value;
@@ -256,7 +293,7 @@ export abstract class AbstractSqliteDriver implements Driver {
      */
     prepareHydratedValue(value: any, columnMetadata: ColumnMetadata): any {
         if (value === null || value === undefined)
-            return value;
+            return columnMetadata.transformer ? ApplyValueTransformers.transformFrom(columnMetadata.transformer, value) : value;
 
         if (columnMetadata.type === Boolean || columnMetadata.type === "boolean") {
             value = value ? true : false;
@@ -272,7 +309,18 @@ export abstract class AbstractSqliteDriver implements Driver {
              * https://www.w3.org/TR/NOTE-datetime
              */
             if (value && typeof value === "string") {
-                value = value.replace(" ", "T") + "Z";
+                // There are various valid time string formats a sqlite time string might have:
+                // https://www.sqlite.org/lang_datefunc.html
+                // There are two separate fixes we may need to do:
+                //   1) Add 'T' separator if space is used instead
+                //   2) Add 'Z' UTC suffix if no timezone or offset specified
+
+                if (/^\d\d\d\d-\d\d-\d\d \d\d:\d\d/.test(value)) {
+                    value = value.replace(" ", "T");
+                }
+                if (/^\d\d\d\d-\d\d-\d\dT\d\d:\d\d(:\d\d(\.\d\d\d)?)?$/.test(value)) {
+                    value += "Z";
+                }
             }
 
             value = DateUtils.normalizeHydratedDate(value);
@@ -288,10 +336,14 @@ export abstract class AbstractSqliteDriver implements Driver {
 
         } else if (columnMetadata.type === "simple-json") {
             value = DateUtils.stringToSimpleJson(value);
+
+        } else if ( columnMetadata.type === "simple-enum" ) {
+            value = DateUtils.stringToSimpleEnum(value, columnMetadata);
+
         }
 
         if (columnMetadata.transformer)
-            value = columnMetadata.transformer.from(value);
+            value = ApplyValueTransformers.transformFrom(columnMetadata.transformer, value);
 
         return value;
     }
@@ -385,6 +437,9 @@ export abstract class AbstractSqliteDriver implements Driver {
         } else if (column.type === "simple-json") {
             return "text";
 
+        } else if (column.type === "simple-enum") {
+            return "varchar";
+
         } else {
             return column.type as string || "";
         }
@@ -432,7 +487,9 @@ export abstract class AbstractSqliteDriver implements Driver {
      */
     createFullType(column: TableColumn): string {
         let type = column.type;
-
+        if (column.enum) {
+            return "varchar";
+        }
         if (column.length) {
             type += "(" + column.length + ")";
 
@@ -470,11 +527,13 @@ export abstract class AbstractSqliteDriver implements Driver {
     /**
      * Creates generated map of values generated or returned by database after INSERT query.
      */
-    createGeneratedMap(metadata: EntityMetadata, insertResult: any) {
+    createGeneratedMap(metadata: EntityMetadata, insertResult: any, entityIndex: number, entityNum: number) {
         const generatedMap = metadata.generatedColumns.reduce((map, generatedColumn) => {
             let value: any;
             if (generatedColumn.generationStrategy === "increment" && insertResult) {
-                value = insertResult;
+                // NOTE: When INSERT statement is successfully completed, the last inserted row ID is returned.
+                // see also: SqliteQueryRunner.query()
+                value = insertResult - entityNum + entityIndex + 1;
             // } else if (generatedColumn.generationStrategy === "uuid") {
             //     value = insertValue[generatedColumn.databaseName];
             }
@@ -535,6 +594,13 @@ export abstract class AbstractSqliteDriver implements Driver {
      * Returns true if driver supports uuid values generation on its own.
      */
     isUUIDGenerationSupported(): boolean {
+        return false;
+    }
+
+    /**
+     * Returns true if driver supports fulltext indices.
+     */
+    isFullTextColumnTypeSupported(): boolean {
         return false;
     }
 

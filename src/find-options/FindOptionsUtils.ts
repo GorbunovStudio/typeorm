@@ -3,6 +3,7 @@ import {FindOneOptions} from "./FindOneOptions";
 import {SelectQueryBuilder} from "../query-builder/SelectQueryBuilder";
 import {FindRelationsNotFoundError} from "../error/FindRelationsNotFoundError";
 import {EntityMetadata} from "../metadata/EntityMetadata";
+import {shorten} from "../util/StringUtils";
 
 /**
  * Utilities to work with FindOptions.
@@ -16,29 +17,33 @@ export class FindOptionsUtils {
     /**
      * Checks if given object is really instance of FindOneOptions interface.
      */
-    static isFindOneOptions(obj: any): obj is FindOneOptions<any> {
-        const possibleOptions: FindOneOptions<any> = obj;
+    static isFindOneOptions<Entity = any>(obj: any): obj is FindOneOptions<Entity> {
+        const possibleOptions: FindOneOptions<Entity> = obj;
         return possibleOptions &&
                 (
-                    possibleOptions.select instanceof Array ||
+                    Array.isArray(possibleOptions.select) ||
                     possibleOptions.where instanceof Object ||
                     typeof possibleOptions.where === "string" ||
-                    possibleOptions.relations instanceof Array ||
+                    Array.isArray(possibleOptions.relations) ||
                     possibleOptions.join instanceof Object ||
                     possibleOptions.order instanceof Object ||
                     possibleOptions.cache instanceof Object ||
                     typeof possibleOptions.cache === "boolean" ||
                     typeof possibleOptions.cache === "number" ||
+                    possibleOptions.lock instanceof Object ||
                     possibleOptions.loadRelationIds instanceof Object ||
-                    typeof possibleOptions.loadRelationIds === "boolean"
+                    typeof possibleOptions.loadRelationIds === "boolean" ||
+                    typeof possibleOptions.loadEagerRelations === "boolean" ||
+                    typeof possibleOptions.withDeleted === "boolean" ||
+                    typeof possibleOptions.transaction === "boolean"
                 );
     }
 
     /**
      * Checks if given object is really instance of FindManyOptions interface.
      */
-    static isFindManyOptions(obj: any): obj is FindManyOptions<any> {
-        const possibleOptions: FindManyOptions<any> = obj;
+    static isFindManyOptions<Entity = any>(obj: any): obj is FindManyOptions<Entity> {
+        const possibleOptions: FindManyOptions<Entity> = obj;
         return possibleOptions && (
             this.isFindOneOptions(possibleOptions) ||
             typeof (possibleOptions as FindManyOptions<any>).skip === "number" ||
@@ -80,6 +85,10 @@ export class FindOptionsUtils {
         if (!options || (!this.isFindOneOptions(options) && !this.isFindManyOptions(options)))
             return qb;
 
+        if (options.transaction === true) {
+            qb.expressionMap.useTransaction = true;
+        }
+
         if (!qb.expressionMap.mainAlias || !qb.expressionMap.mainAlias.hasMetadata)
             return qb;
 
@@ -89,7 +98,7 @@ export class FindOptionsUtils {
         if (options.select) {
             qb.select([]);
             options.select.forEach(select => {
-                if (!metadata.findColumnWithPropertyPath(select))
+                if (!metadata.findColumnWithPropertyPath(String(select)))
                     throw new Error(`${select} column was not found in the ${metadata.name} entity.`);
 
                 qb.addSelect(qb.alias + "." + select);
@@ -169,6 +178,18 @@ export class FindOptionsUtils {
             }
         }
 
+        if (options.lock) {
+            if (options.lock.mode === "optimistic") {
+                qb.setLock(options.lock.mode, options.lock.version as any);
+            } else if (options.lock.mode === "pessimistic_read" || options.lock.mode === "pessimistic_write" || options.lock.mode === "dirty_read" || options.lock.mode === "pessimistic_partial_write" || options.lock.mode === "pessimistic_write_or_fail") {
+                qb.setLock(options.lock.mode);
+            }
+        }
+
+        if (options.withDeleted) {
+            qb.withDeleted();
+        }
+
         if (options.loadRelationIds === true) {
             qb.loadAllRelationIds();
 
@@ -203,14 +224,21 @@ export class FindOptionsUtils {
         // go through all matched relations and add join for them
         matchedBaseRelations.forEach(relation => {
 
+            // generate a relation alias
+            let relationAlias: string = alias + "__" + relation;
+            // shorten it if needed by the driver
+            if (qb.connection.driver.maxAliasLength && relationAlias.length > qb.connection.driver.maxAliasLength) {
+                relationAlias = shorten(relationAlias);
+            }
+
             // add a join for the found relation
             const selection = alias + "." + relation;
-            qb.leftJoinAndSelect(selection, alias + "_" + relation);
+            qb.leftJoinAndSelect(selection, relationAlias);
 
             // join the eager relations of the found relation
             const relMetadata = metadata.relations.find(metadata => metadata.propertyName === relation);
             if (relMetadata) {
-                this.joinEagerRelations(qb, alias + "_" + relation, relMetadata.inverseEntityMetadata);
+                this.joinEagerRelations(qb, relationAlias, relMetadata.inverseEntityMetadata);
             }
 
             // remove added relations from the allRelations array, this is needed to find all not found relations at the end
@@ -224,7 +252,7 @@ export class FindOptionsUtils {
 
     public static joinEagerRelations(qb: SelectQueryBuilder<any>, alias: string, metadata: EntityMetadata) {
         metadata.eagerRelations.forEach(relation => {
-            const relationAlias = alias + "_" + relation.propertyPath.replace(".", "_");
+            const relationAlias = qb.connection.namingStrategy.eagerJoinRelationAlias(alias, relation.propertyPath);
             qb.leftJoinAndSelect(alias + "." + relation.propertyPath, relationAlias);
             this.joinEagerRelations(qb, relationAlias, relation.inverseEntityMetadata);
         });

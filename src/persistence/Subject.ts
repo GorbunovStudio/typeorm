@@ -3,6 +3,7 @@ import {EntityMetadata} from "../metadata/EntityMetadata";
 import {SubjectChangeMap} from "./SubjectChangeMap";
 import {OrmUtils} from "../util/OrmUtils";
 import {RelationMetadata} from "../metadata/RelationMetadata";
+import {ColumnMetadata} from "../metadata/ColumnMetadata";
 
 /**
  * Subject is a subject of persistence.
@@ -58,6 +59,12 @@ export class Subject {
     databaseEntity?: ObjectLiteral;
 
     /**
+     * Indicates if database entity was loaded.
+     * No matter if it was found or not, it indicates the fact of loading.
+     */
+    databaseEntityLoaded: boolean = false;
+
+    /**
      * Changes needs to be applied in the database for the given subject.
      */
     changeMaps: SubjectChangeMap[] = [];
@@ -94,9 +101,31 @@ export class Subject {
     mustBeRemoved: boolean = false;
 
     /**
+     * Indicates if this subject can be soft-removed from the database.
+     * This means that this subject either was soft-removed, either was soft-removed by cascades.
+     */
+    canBeSoftRemoved: boolean = false;
+
+    /**
+     * Indicates if this subject can be recovered from the database.
+     * This means that this subject either was recovered, either was recovered by cascades.
+     */
+    canBeRecovered: boolean = false;
+
+    /**
      * Relations updated by the change maps.
      */
     updatedRelationMaps: { relation: RelationMetadata, value: ObjectLiteral }[] = [];
+
+    /**
+     * List of updated columns
+     */
+    diffColumns: ColumnMetadata[] = [];
+
+    /**
+     * List of updated relations
+     */
+    diffRelations: RelationMetadata[] = [];
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -106,16 +135,16 @@ export class Subject {
         metadata: EntityMetadata,
         parentSubject?: Subject,
         entity?: ObjectLiteral,
-        databaseEntity?: ObjectLiteral,
         canBeInserted?: boolean,
         canBeUpdated?: boolean,
         mustBeRemoved?: boolean,
+        canBeSoftRemoved?: boolean,
+        canBeRecovered?: boolean,
         identifier?: ObjectLiteral,
         changeMaps?: SubjectChangeMap[]
     }) {
         this.metadata = options.metadata;
         this.entity = options.entity;
-        this.databaseEntity = options.databaseEntity;
         this.parentSubject = options.parentSubject;
         if (options.canBeInserted !== undefined)
             this.canBeInserted = options.canBeInserted;
@@ -123,25 +152,16 @@ export class Subject {
             this.canBeUpdated = options.canBeUpdated;
         if (options.mustBeRemoved !== undefined)
             this.mustBeRemoved = options.mustBeRemoved;
+        if (options.canBeSoftRemoved !== undefined)
+            this.canBeSoftRemoved = options.canBeSoftRemoved;
+        if (options.canBeRecovered !== undefined)
+            this.canBeRecovered = options.canBeRecovered;
         if (options.identifier !== undefined)
             this.identifier = options.identifier;
         if (options.changeMaps !== undefined)
             this.changeMaps.push(...options.changeMaps);
 
-        if (this.entity) {
-            this.entityWithFulfilledIds = Object.assign({}, this.entity);
-            if (this.parentSubject) {
-                this.metadata.primaryColumns.forEach(primaryColumn => {
-                    if (primaryColumn.relationMetadata && primaryColumn.relationMetadata.inverseEntityMetadata === this.parentSubject!.metadata) {
-                        primaryColumn.setEntityValue(this.entityWithFulfilledIds!, this.parentSubject!.entity);
-                    }
-                });
-            }
-            this.identifier = this.metadata.getEntityIdMap(this.entityWithFulfilledIds);
-
-        } else if (this.databaseEntity) {
-            this.identifier = this.metadata.getEntityIdMap(this.databaseEntity);
-        }
+        this.recompute();
     }
 
     // -------------------------------------------------------------------------
@@ -163,7 +183,33 @@ export class Subject {
      * and if it does have differentiated columns or relations.
      */
     get mustBeUpdated() {
-        return this.canBeUpdated && this.identifier && (this.changeMaps.length > 0 || !!this.metadata.objectIdColumn); // for mongodb we do not compute changes - we always update entity
+        return this.canBeUpdated &&
+            this.identifier &&
+            (this.databaseEntityLoaded === false || (this.databaseEntityLoaded && this.databaseEntity)) &&
+            // ((this.entity && this.databaseEntity) || (!this.entity && !this.databaseEntity)) &&
+            this.changeMaps.length > 0;
+    }
+
+    /**
+     * Checks if this subject must be soft-removed into the database.
+     * Subject can be updated in the database if it is allowed to be soft-removed (explicitly persisted or by cascades)
+     * and if it does have differentiated columns or relations.
+     */
+    get mustBeSoftRemoved() {
+        return this.canBeSoftRemoved &&
+            this.identifier &&
+            (this.databaseEntityLoaded === false || (this.databaseEntityLoaded && this.databaseEntity));
+    }
+
+    /**
+     * Checks if this subject must be recovered into the database.
+     * Subject can be updated in the database if it is allowed to be recovered (explicitly persisted or by cascades)
+     * and if it does have differentiated columns or relations.
+     */
+    get mustBeRecovered() {
+        return this.canBeRecovered &&
+            this.identifier &&
+            (this.databaseEntityLoaded === false || (this.databaseEntityLoaded && this.databaseEntity));
     }
 
     // -------------------------------------------------------------------------
@@ -231,6 +277,28 @@ export class Subject {
         }, {} as ObjectLiteral);
         this.changeMaps = changeMapsWithoutValues;
         return changeSet;
+    }
+
+    /**
+     * Recomputes entityWithFulfilledIds and identifier when entity changes.
+     */
+    recompute(): void {
+
+        if (this.entity) {
+            this.entityWithFulfilledIds = Object.assign({}, this.entity);
+            if (this.parentSubject) {
+                this.metadata.primaryColumns.forEach(primaryColumn => {
+                    if (primaryColumn.relationMetadata && primaryColumn.relationMetadata.inverseEntityMetadata === this.parentSubject!.metadata) {
+                        const value = primaryColumn.referencedColumn!.getEntityValue(this.parentSubject!.entity!);
+                        primaryColumn.setEntityValue(this.entityWithFulfilledIds!, value);
+                    }
+                });
+            }
+            this.identifier = this.metadata.getEntityIdMap(this.entityWithFulfilledIds);
+
+        } else if (this.databaseEntity) {
+            this.identifier = this.metadata.getEntityIdMap(this.databaseEntity);
+        }
     }
 
 }

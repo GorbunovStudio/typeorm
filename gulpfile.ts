@@ -11,8 +11,7 @@ const replace = require("gulp-replace");
 const rename = require("gulp-rename");
 const mocha = require("gulp-mocha");
 const chai = require("chai");
-const tslint = require("gulp-tslint");
-const stylish = require("tslint-stylish");
+const eslint = require("gulp-eslint");
 const sourcemaps = require("gulp-sourcemaps");
 const istanbul = require("gulp-istanbul");
 const remapIstanbul = require("remap-istanbul/lib/gulpRemapIstanbul");
@@ -65,19 +64,18 @@ export class Gulpfile {
             "!./src/commands/*.ts",
             "!./src/cli.ts",
             "!./src/typeorm.ts",
-            "!./src/typeorm-model-shim.ts",
-            "!./src/platform/PlatformTools.ts"
+            "!./src/typeorm-model-shim.ts"
         ])
         .pipe(gulp.dest("./build/browser/src"));
     }
 
     /**
-     * Replaces PlatformTools with browser-specific implementation called BrowserPlatformTools.
+     * Copies templates for compilation
      */
     @Task()
-    browserCopyPlatformTools() {
-        return gulp.src("./src/platform/BrowserPlatformTools.template")
-            .pipe(rename("PlatformTools.ts"))
+    browserCopyTemplates() {
+        return gulp.src("./src/platform/*.template")
+            .pipe(rename((p: any) => { p.extname = '.ts'; }))
             .pipe(gulp.dest("./build/browser/src/platform"));
     }
 
@@ -88,7 +86,10 @@ export class Gulpfile {
             "lib": ["es5", "es6", "dom"],
             typescript: require("typescript")
         });
-        const tsResult = gulp.src(["./build/browser/src/**/*.ts", "./node_modules/reflect-metadata/**/*.d.ts", "./node_modules/@types/**/*.ts"])
+        const tsResult = gulp.src([
+            "./build/browser/src/**/*.ts",
+            "./node_modules/reflect-metadata/**/*.d.ts"
+        ])
             .pipe(sourcemaps.init())
             .pipe(tsProject());
 
@@ -138,8 +139,12 @@ export class Gulpfile {
      */
     @MergedTask()
     packageCompile() {
-        const tsProject = ts.createProject("tsconfig.json", { typescript: require("typescript") });
-        const tsResult = gulp.src(["./src/**/*.ts", "./node_modules/@types/**/*.ts"])
+        const tsProject = ts.createProject("tsconfig.json", {
+            typescript: require("typescript")
+        });
+        const tsResult = gulp.src([
+            "./src/**/*.ts"
+        ])
             .pipe(sourcemaps.init())
             .pipe(tsProject());
 
@@ -217,7 +222,7 @@ export class Gulpfile {
     package() {
         return [
             "clean",
-            ["browserCopySources", "browserCopyPlatformTools"],
+            ["browserCopySources", "browserCopyTemplates"],
             ["packageCompile", "browserCompile"],
             "packageMoveCompiledFiles",
             [
@@ -255,14 +260,11 @@ export class Gulpfile {
      * Runs ts linting to validate source code.
      */
     @Task()
-    tslint() {
+    eslint() {
         return gulp.src(["./src/**/*.ts", "./test/**/*.ts", "./sample/**/*.ts"])
-            .pipe(tslint())
-            .pipe(tslint.report(stylish, {
-                emitError: true,
-                sort: true,
-                bell: true
-            }));
+            .pipe(eslint())
+            .pipe(eslint.format('stylish'))
+            .pipe(eslint.failAfterError())
     }
 
     /**

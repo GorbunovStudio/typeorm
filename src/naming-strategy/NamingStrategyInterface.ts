@@ -60,7 +60,7 @@ export interface NamingStrategyInterface {
     /**
      * Gets the name of the foreign key.
      */
-    foreignKeyName(tableOrName: Table|string, columnNames: string[]): string;
+    foreignKeyName(tableOrName: Table|string, columnNames: string[], referencedTablePath?: string, referencedColumnNames?: string[]): string;
 
     /**
      * Gets the name of the index - simple and compose index.
@@ -71,6 +71,11 @@ export interface NamingStrategyInterface {
      * Gets the name of the check constraint.
      */
     checkConstraintName(tableOrName: Table|string, expression: string): string;
+
+    /**
+     * Gets the name of the exclusion constraint.
+     */
+    exclusionConstraintName(tableOrName: Table|string, expression: string): string;
 
     /**
      * Gets the name of the join column used in the one-to-one and many-to-one relations.
@@ -112,4 +117,18 @@ export interface NamingStrategyInterface {
      */
     prefixTableName(prefix: string, tableName: string): string;
 
+    /**
+     * Gets the name of the alias used for relation joins.
+     */
+    eagerJoinRelationAlias(alias: string, propertyPath: string): string;
+
+    /**
+     * Column names for nested sets.
+     */
+    nestedSetColumnNames: { left: string, right: string };
+
+    /**
+     * Column name for materialized paths.
+     */
+    materializedPathColumnName: string;
 }

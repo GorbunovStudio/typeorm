@@ -5,6 +5,8 @@ import {ObjectLiteral} from "../common/ObjectLiteral";
 import {ColumnMetadata} from "./ColumnMetadata";
 import {EmbeddedMetadata} from "./EmbeddedMetadata";
 import {RelationMetadataArgs} from "../metadata-args/RelationMetadataArgs";
+import {DeferrableType} from "./types/DeferrableType";
+import {OnUpdateType} from "./types/OnUpdateType";
 import {OnDeleteType} from "./types/OnDeleteType";
 import {PropertyTypeFactory} from "./types/PropertyTypeInFunction";
 
@@ -123,6 +125,16 @@ export class RelationMetadata {
     isCascadeRemove: boolean = false;
 
     /**
+     * If set to true then related objects are allowed to be soft-removed from the database.
+     */
+    isCascadeSoftRemove: boolean = false;
+
+    /**
+     * If set to true then related objects are allowed to be recovered from the database.
+     */
+    isCascadeRecover: boolean = false;
+
+    /**
      * Indicates if relation column value can be nullable or not.
      */
     isNullable: boolean = true;
@@ -131,6 +143,16 @@ export class RelationMetadata {
      * What to do with a relation on deletion of the row containing a foreign key.
      */
     onDelete?: OnDeleteType;
+
+    /**
+     * What to do with a relation on update of the row containing a foreign key.
+     */
+    onUpdate?: OnUpdateType;
+
+    /**
+     * What to do with a relation on update of the row containing a foreign key.
+     */
+    deferrable?: DeferrableType;
 
     /**
      * Gets the property's type to which this relation is applied.
@@ -259,12 +281,21 @@ export class RelationMetadata {
             this.givenInverseSidePropertyFactory = args.inverseSideProperty;
 
         this.isLazy = args.isLazy || false;
-        this.isCascadeInsert = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("insert") !== -1);
-        this.isCascadeUpdate = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("update") !== -1);
-        this.isCascadeRemove = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("remove") !== -1);
+        // this.isCascadeInsert = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("insert") !== -1);
+        // this.isCascadeUpdate = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("update") !== -1);
+        // this.isCascadeRemove = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("remove") !== -1);
+        // this.isCascadeSoftRemove = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("soft-remove") !== -1);
+        // this.isCascadeRecover = args.options.cascade === true || (args.options.cascade instanceof Array && args.options.cascade.indexOf("recover") !== -1);
+        this.isCascadeInsert = args.options.cascade === true || (Array.isArray(args.options.cascade) && args.options.cascade.indexOf("insert") !== -1);
+        this.isCascadeUpdate = args.options.cascade === true || (Array.isArray(args.options.cascade) && args.options.cascade.indexOf("update") !== -1);
+        this.isCascadeRemove = args.options.cascade === true || (Array.isArray(args.options.cascade) && args.options.cascade.indexOf("remove") !== -1);
+        this.isCascadeSoftRemove = args.options.cascade === true || (Array.isArray(args.options.cascade) && args.options.cascade.indexOf("soft-remove") !== -1);
+        this.isCascadeRecover = args.options.cascade === true || (Array.isArray(args.options.cascade) && args.options.cascade.indexOf("recover") !== -1);
         this.isPrimary = args.options.primary || false;
         this.isNullable = args.options.nullable === false || this.isPrimary ? false : true;
         this.onDelete = args.options.onDelete;
+        this.onUpdate = args.options.onUpdate;
+        this.deferrable = args.options.deferrable;
         this.isEager = args.options.eager || false;
         this.persistenceEnabled = args.options.persistence === false ? false : true;
         this.isTreeParent = args.isTreeParent || false;
@@ -318,7 +349,7 @@ export class RelationMetadata {
      * If column is in embedded (or recursive embedded) it extracts its value from there.
      */
     getEntityValue(entity: ObjectLiteral, getLazyRelationsPromiseValue: boolean = false): any|undefined {
-
+        if (entity === null || entity === undefined) return undefined;
         // extract column value from embeddeds of entity if column is in embedded
         if (this.embeddedMetadata) {
 

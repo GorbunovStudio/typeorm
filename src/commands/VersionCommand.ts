@@ -1,13 +1,14 @@
-const exec = require("child_process").exec;
+import * as yargs from "yargs";
+import {exec} from "child_process";
 
 /**
  * Shows typeorm version.
  */
-export class VersionCommand {
+export class VersionCommand implements yargs.CommandModule {
     command = "version";
     describe = "Prints TypeORM version this project uses.";
 
-    async handler(argv: any) {
+    async handler() {
 
         const localNpmList = await VersionCommand.executeCommand("npm list --depth=0");
         const localMatches = localNpmList.match(/ typeorm@(.*)\n/);

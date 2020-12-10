@@ -10,7 +10,7 @@ describe("transaction > return data from transaction", () => {
     let connections: Connection[];
     before(async () => connections = await createTestingConnections({
         entities: [__dirname + "/entity/*{.js,.ts}"],
-        enabledDrivers: ["mysql", "sqlite", "postgres"] // todo: for some reasons mariadb tests are not passing here
+        enabledDrivers: ["mysql", "sqlite", "better-sqlite3", "postgres"] // todo: for some reasons mariadb tests are not passing here
     }));
     beforeEach(() => reloadTestingDatabases(connections));
     after(() => closeTestingConnections(connections));
@@ -35,14 +35,14 @@ describe("transaction > return data from transaction", () => {
         });
 
         const post = await connection.manager.findOne(Post, { where: { title: "Post #1" }});
-        expect(post).not.to.be.empty;
+        expect(post).not.to.be.undefined;
         post!.should.be.eql({
             id: postId,
             title: "Post #1"
         });
 
         const category = await connection.manager.findOne(Category, { where: { name: "Category #1" }});
-        expect(category).not.to.be.empty;
+        expect(category).not.to.be.undefined;
         category!.should.be.eql({
             id: categoryId,
             name: "Category #1"
@@ -70,14 +70,14 @@ describe("transaction > return data from transaction", () => {
         });
 
         const post = await connection.manager.findOne(Post, { where: { title: "Post #1" }});
-        expect(post).not.to.be.empty;
+        expect(post).not.to.be.undefined;
         post!.should.be.eql({
             id: postId,
             title: "Post #1"
         });
 
         const category = await connection.manager.findOne(Category, { where: { name: "Category #1" }});
-        expect(category).not.to.be.empty;
+        expect(category).not.to.be.undefined;
         category!.should.be.eql({
             id: categoryId,
             name: "Category #1"

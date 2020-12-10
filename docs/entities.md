@@ -1,14 +1,18 @@
+
+
 # Entities
 
 * [What is Entity?](#what-is-entity)
 * [Entity columns](#entity-columns)
   * [Primary columns](#primary-columns)
   * [Special columns](#special-columns)
+  * [Spatial columns](#spatial-columns)
 * [Column types](#column-types)
   * [Column types for `mysql` / `mariadb`](#column-types-for-mysql--mariadb)
-  * [Column types for `postgres`](#column-types-for-postgres)
-  * [Column types for `sqlite` / `cordova` / `react-native`](#column-types-for-sqlite--cordova--react-native)
+  * [Column types for `postgres` / `cockroachdb`](#column-types-for-postgres)
+  * [Column types for `sqlite` / `cordova` / `react-native` / `expo`](#column-types-for-sqlite--cordova--react-native--expo)
   * [Column types for `mssql`](#column-types-for-mssql)
+  * [`enum` column type](#enum-column-type)
   * [`simple-array` column type](#simple-array-column-type)
   * [`simple-json` column type](#simple-json-column-type)
   * [Columns with generated values](#columns-with-generated-values)
@@ -94,7 +98,7 @@ If you want to set a base prefix for all database tables in your application you
 
 When using an entity constructor its arguments **must be optional**. Since ORM creates instances of entity classes when loading from the database, therefore it is not aware of your constructor arguments.
 
-Learn more about parameters @Entity in [Decorators reference](decorator-reference.md).
+Learn more about parameters `@Entity` in [Decorators reference](decorator-reference.md).
 
 ## Entity columns
 
@@ -106,7 +110,7 @@ Each entity class property you marked with `@Column` will be mapped to a databas
 Each entity must have at least one primary column.
 There are several types of primary columns:
 
-* `@PrimaryColumn()` creates a primary column which take any value of any type. You can specify the column type. If you don't specify a column type it will be inferred from the property type. Example below will create id with `int` as type which you must manually assign before save.
+* `@PrimaryColumn()` creates a primary column which takes any value of any type. You can specify the column type. If you don't specify a column type it will be inferred from the property type. The example below will create id with `int` as type which you must manually assign before save.
 
 ```typescript
 import {Entity, PrimaryColumn} from "typeorm";
@@ -168,11 +172,11 @@ export class User {
 }
 ```
 
-When you save entities using `save` it always tries to find a entity in the database with the given entity id (or ids).
+When you save entities using `save` it always tries to find an entity in the database with the given entity id (or ids).
 If id/ids are found then it will update this row in the database.
 If there is no row with the id/ids, a new row will be inserted.
 
-To find a entity by id you can use `manager.findOne` or `repository.findOne`. Example:
+To find an entity by id you can use `manager.findOne` or `repository.findOne`. Example:
 
 ```typescript
 // find one by id with single primary key
@@ -196,9 +200,64 @@ You don't need to set this column - it will be automatically set.
 each time you call `save` of entity manager or repository.
 You don't need to set this column - it will be automatically set.
 
+* `@DeleteDateColumn` is a special column that is automatically set to the entity's delete time each time you call soft-delete of entity manager or repository. You don't need to set this column - it will be automatically set. If the @DeleteDateColumn is set, the default scope will be "non-deleted".
+
 * `@VersionColumn` is a special column that is automatically set to the version of the entity (incremental number)  
 each time you call `save` of entity manager or repository.
 You don't need to set this column - it will be automatically set.
+
+### Spatial columns
+
+MS SQL, MySQL / MariaDB, and PostgreSQL all support spatial columns. TypeORM's
+support for each varies slightly between databases, particularly as the column
+names vary between databases.
+
+MS SQL and MySQL / MariaDB's TypeORM support exposes (and expects) geometries to
+be provided as [well-known text
+(WKT)](https://en.wikipedia.org/wiki/Well-known_text), so geometry columns
+should be tagged with the `string` type.
+
+TypeORM's PostgreSQL support uses [GeoJSON](http://geojson.org/) as an
+interchange format, so geometry columns should be tagged either as `object` or
+`Geometry` (or subclasses, e.g. `Point`) after importing [`geojson`
+types](https://www.npmjs.com/package/@types/geojson).
+
+TypeORM tries to do the right thing, but it's not always possible to determine
+when a value being inserted or the result of a PostGIS function should be
+treated as a geometry. As a result, you may find yourself writing code similar
+to the following, where values are converted into PostGIS `geometry`s from
+GeoJSON and into GeoJSON as `json`:
+
+```typescript
+const origin = {
+  type: "Point",
+  coordinates: [0, 0]
+};
+
+await getManager()
+    .createQueryBuilder(Thing, "thing")
+    // convert stringified GeoJSON into a geometry with an SRID that matches the
+    // table specification
+    .where("ST_Distance(geom, ST_SetSRID(ST_GeomFromGeoJSON(:origin), ST_SRID(geom))) > 0")
+    .orderBy({
+        "ST_Distance(geom, ST_SetSRID(ST_GeomFromGeoJSON(:origin), ST_SRID(geom)))": {
+            order: "ASC"
+        }
+    })
+    .setParameters({
+      // stringify GeoJSON
+      origin: JSON.stringify(origin)
+    })
+    .getMany();
+
+await getManager()
+    .createQueryBuilder(Thing, "thing")
+    // convert geometry result into GeoJSON, treated as JSON (so that TypeORM
+    // will know to deserialize it)
+    .select("ST_AsGeoJSON(ST_Buffer(geom, 0.1))::json geom")
+    .from("thing")
+    .getMany();
+```
 
 
 ## Column types
@@ -229,16 +288,19 @@ For example:
 or
 
 ```typescript
-@Column({ type: "int", length: 200 })
+@Column({ type: "int", width: 200 })
 ```
+
+> Note about `bigint` type: `bigint` column type, used in SQL databases, doesn't fit into the regular `number` type and maps property to a `string` instead.
 
 ### Column types for `mysql` / `mariadb`
 
-`int`, `tinyint`, `smallint`, `mediumint`, `bigint`, `float`, `double`, `dec`, `decimal`, `numeric`,
-`date`, `datetime`, `timestamp`, `time`, `year`, `char`, `varchar`, `nvarchar`, `text`, `tinytext`,
-`mediumtext`, `blob`, `longtext`, `tinyblob`, `mediumblob`, `longblob`, `enum`, `json`, `binary`,
-`geometry`, `point`, `linestring`, `polygon`, `multipoint`, `multilinestring`, `multipolygon`,
- `geometrycollection`
+`bit`, `int`, `integer`, `tinyint`, `smallint`, `mediumint`, `bigint`, `float`, `double`,
+`double precision`, `dec`, `decimal`, `numeric`, `fixed`, `bool`, `boolean`, `date`, `datetime`,
+`timestamp`, `time`, `year`, `char`, `nchar`, `national char`, `varchar`, `nvarchar`, `national varchar`,
+`text`, `tinytext`, `mediumtext`, `blob`, `longtext`, `tinyblob`, `mediumblob`, `longblob`, `enum`, `set`,
+`json`, `binary`, `varbinary`, `geometry`, `point`, `linestring`, `polygon`, `multipoint`, `multilinestring`,
+`multipolygon`, `geometrycollection`
 
 ### Column types for `postgres`
 
@@ -249,9 +311,21 @@ or
 `date`, `time`, `time without time zone`, `time with time zone`, `interval`, `bool`, `boolean`,
 `enum`, `point`, `line`, `lseg`, `box`, `path`, `polygon`, `circle`, `cidr`, `inet`, `macaddr`,
 `tsvector`, `tsquery`, `uuid`, `xml`, `json`, `jsonb`, `int4range`, `int8range`, `numrange`,
-`tsrange`, `tstzrange`, `daterange`
+`tsrange`, `tstzrange`, `daterange`, `geometry`, `geography`, `cube`, `ltree`
 
-### Column types for `sqlite` / `cordova` / `react-native`
+### Column types for `cockroachdb`
+
+`array`, `bool`, `boolean`, `bytes`, `bytea`, `blob`, `date`, `numeric`, `decimal`, `dec`, `float`,
+`float4`, `float8`, `double precision`, `real`, `inet`, `int`, `integer`, `int2`, `int8`, `int64`,
+`smallint`, `bigint`, `interval`, `string`, `character varying`, `character`, `char`, `char varying`,
+`varchar`, `text`, `time`, `time without time zone`, `timestamp`, `timestamptz`, `timestamp without time zone`,
+`timestamp with time zone`, `json`, `jsonb`, `uuid`
+
+> Note: CockroachDB returns all numeric data types as `string`. However if you omit column type and define your property as
+ `number` ORM will `parseInt` string into number.
+
+
+### Column types for `sqlite` / `cordova` / `react-native` / `expo`
 
 `int`, `int2`, `int8`, `integer`, `tinyint`, `smallint`, `mediumint`, `bigint`, `decimal`,
 `numeric`, `float`, `double`, `real`, `double precision`, `datetime`, `varying character`,
@@ -271,6 +345,101 @@ or
 `decimal`, `integer`, `int`, `smallint`, `real`, `double precision`, `date`, `timestamp`, `timestamp with time zone`,
 `timestamp with local time zone`, `interval year to month`, `interval day to second`, `bfile`, `blob`, `clob`,
 `nclob`, `rowid`, `urowid`
+
+### `enum` column type
+
+`enum` column type is supported by `postgres` and `mysql`. There are various possible column definitions:
+
+Using typescript enums:
+```typescript
+export enum UserRole {
+    ADMIN = "admin",
+    EDITOR = "editor",
+    GHOST = "ghost"
+}
+
+@Entity()
+export class User {
+
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    @Column({
+        type: "enum",
+        enum: UserRole,
+        default: UserRole.GHOST
+    })
+    role: UserRole
+
+}
+```
+> Note: String, numeric and heterogeneous enums are supported.
+
+Using array with enum values:
+```typescript
+export type UserRoleType = "admin" | "editor" | "ghost",
+
+@Entity()
+export class User {
+
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    @Column({
+        type: "enum",
+        enum: ["admin", "editor", "ghost"],
+        default: "ghost"
+    })
+    role: UserRoleType
+}
+```
+
+### `set` column type
+
+`set` column type is supported by `mariadb` and `mysql`. There are various possible column definitions:
+
+Using typescript enums:
+```typescript
+export enum UserRole {
+    ADMIN = "admin",
+    EDITOR = "editor",
+    GHOST = "ghost"
+}
+
+@Entity()
+export class User {
+
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    @Column({
+        type: "set",
+        enum: UserRole,
+        default: [UserRole.GHOST, UserRole.EDITOR]
+    })
+    roles: UserRole[]
+
+}
+```
+
+Using array with `set` values:
+```typescript
+export type UserRoleType = "admin" | "editor" | "ghost",
+
+@Entity()
+export class User {
+
+    @PrimaryGeneratedColumn()
+    id: number;
+
+    @Column({
+        type: "set",
+        enum: ["admin", "editor", "ghost"],
+        default: ["ghost", "editor"]
+    })
+    roles: UserRoleType[]
+}
+```
 
 ### `simple-array` column type
 
@@ -311,7 +480,7 @@ Note you **MUST NOT** have any comma in values you write.
 There is a special column type called `simple-json` which can store any values which can be stored in database
 via JSON.stringify.
 Very useful when you do not have json type in your database and you want to store and load object
-without any hustle.
+without any hassle.
 For example:
 
 ```typescript
@@ -355,7 +524,7 @@ export class User {
 
 `uuid` value will be automatically generated and stored into the database.
 
-Besides "uuid" there is also "increment" generated type, however there are some limitations
+Besides "uuid" there is also "increment" and "rowid" (CockroachDB only) generated types, however there are some limitations
 on some database platforms with this type of generation (for example some databases can only have one increment column,
 or some of them require increment to be a primary key).
 
@@ -378,15 +547,15 @@ List of available options in `ColumnOptions`:
 
 * `type: ColumnType` - Column type. One of the type listed [above](#column-types).
 * `name: string` - Column name in the database table.
-
 By default the column name is generated from the name of the property.
-You can change it by specifying your own name
+You can change it by specifying your own name.
 
 * `length: number` - Column type's length. For example if you want to create `varchar(150)` type you specify column type and length options.
 * `width: number` - column type's display width. Used only for [MySQL integer types](https://dev.mysql.com/doc/refman/5.7/en/integer-types.html)
 * `onUpdate: string` - `ON UPDATE` trigger. Used only in [MySQL](https://dev.mysql.com/doc/refman/5.7/en/timestamp-initialization.html).
 * `nullable: boolean` - Makes column `NULL` or `NOT NULL` in the database. By default column is `nullable: false`.
-* `readonly: boolean` - Indicates if column value is not updated by "save" operation. It means you'll be able to write this value only when you first time insert the object. Default value is `false`.
+* `update: boolean` - Indicates if column value is updated by "save" operation. If false, you'll be able to write this value only when you first time insert the object. Default value is `true`.
+* `insert: boolean` - Indicates if column value is set the first time you insert the object.  Default value is `true`.
 * `select: boolean` - Defines whether or not to hide this column by default when making queries. When set to `false`, the column data will not show with a standard query. By default column is `select: true`
 * `default: string` - Adds database-level column's `DEFAULT` value.
 * `primary: boolean` - Marks column as primary. Same if you use `@PrimaryColumn`.
@@ -403,8 +572,8 @@ You can change it by specifying your own name
 * `asExpression: string` - Generated column expression. Used only in [MySQL](https://dev.mysql.com/doc/refman/5.7/en/create-table-generated-columns.html).
 * `generatedType: "VIRTUAL"|"STORED"` - Generated column type. Used only in [MySQL](https://dev.mysql.com/doc/refman/5.7/en/create-table-generated-columns.html).
 * `hstoreType: "object"|"string"` - Return type of `HSTORE` column. Returns value as string or as object. Used only in [Postgres](https://www.postgresql.org/docs/9.6/static/hstore.html).
-* `array: boolean` - Used for postgres column types which can be array (for example int[])
-* `transformer: { from(value: DatabaseType): EntityType, to(value: EntityType): DatabaseType }` - Used to marshal properties of arbitrary type `EntityType` into a type `DatabaseType` supported by the database.
+* `array: boolean` - Used for postgres and cockroachdb column types which can be array (for example int[])
+* `transformer: { from(value: DatabaseType): EntityType, to(value: EntityType): DatabaseType }` - Used to marshal properties of arbitrary type `EntityType` into a type `DatabaseType` supported by the database. Array of transformers are also supported and will be applied in natural order when writing, and in reverse order when reading. e.g. `[lowercase, encrypt]` will first lowercase the string then encrypt it when writing, and will decrypt then do nothing when reading.
 
 Note: most of those column options are RDBMS-specific and aren't available in `MongoDB`.
 
@@ -536,11 +705,11 @@ export class Category {
     @Column()
     description: string;
 
-    @OneToMany(type => Category, category => category.children)
+    @ManyToOne(type => Category, category => category.children)
     parent: Category;
 
-    @ManyToOne(type => Category, category => category.parent)
-    children: Category;
+    @OneToMany(type => Category, category => category.parent)
+    children: Category[];
 }
 
 ```
@@ -569,7 +738,7 @@ export class Category {
     description: string;
 
     @TreeChildren()
-    children: Category;
+    children: Category[];
 
     @TreeParent()
     parent: Category;
